@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 import os
-
 import aws_cdk as cdk
-
 from cdk_app_project.cdk_app_project_stack import CdkAppProjectStack
-
+from cdk_app_project.stacks.stacks_utils.constants_util import Constants
 
 app = cdk.App()
 
-deployment_env_name = app.node.try_get_context("environment")
+deployment_env_name = app.node.try_get_context(Constants.DEPLOYMENT_ENVIRONMENT_KEY)
 if deployment_env_name is None:
     raise ValueError("Missing required context value: 'environment'. Pass via --context environment=dev")
 
