@@ -15,7 +15,6 @@ def formulate_resource_id(parent: Stack, resource_type: str)->str:
 
 def load_configuration(parent: Construct, entity: str) -> Dict[str, Any]:
     """Load configuration based on environment"""
-    context = parent.node.get_context(Constants.DEPLOYMENT_ENVIRONMENT_KEY)
     env = parent.node.try_get_context(Constants.DEPLOYMENT_ENVIRONMENT_KEY)
     if not env:
         raise ValueError("Deployment environment is not set in context")
