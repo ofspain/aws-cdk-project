@@ -1,1 +1,5 @@
 boto3
+mysql-connector-python
+psycopg2-binary
+cx_Oracle
+aws-lambda-powertools
