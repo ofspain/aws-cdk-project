@@ -5,11 +5,16 @@ class PathResolver:
     Utility to resolve asset paths relative to the project root.
     """
 
-    def __init__(self, current_file: str, levels_up: int = 2):
-        # Resolve up to the desired project root (default: 2 levels up)
-        self.base_path = Path(current_file).resolve()
-        for _ in range(levels_up):
-            self.base_path = self.base_path.parent
+    def __init__(self, current_file: str, marker_file: str = "cdk.json"):
+        self.base_path = self.find_project_root(Path(current_file).resolve(), marker_file)
+
+    def find_project_root(self, start_path: Path, marker_file: str) -> Path:
+        current = start_path
+        while not (current / marker_file).exists():
+            if current.parent == current:
+                raise FileNotFoundError(f"Could not find project root containing '{marker_file}'")
+            current = current.parent
+        return current
 
     def path_from_root(self, *subpaths: str) -> Path:
         """

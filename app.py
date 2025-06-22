@@ -2,7 +2,10 @@
 import os
 import aws_cdk as cdk
 from cdk_app_project.cdk_app_project_stack import CdkAppProjectStack
+from cdk_app_project.stacks.dependency_stacks.db_stack import RdsStack, DBEngineType
+from cdk_app_project.stacks.infrastructure_stack import InfraStack
 from cdk_app_project.stacks.stacks_utils.constants_util import Constants
+from cdk_app_project.stacks.vpc_stack import VPCStack
 
 app = cdk.App()
 
@@ -22,12 +25,9 @@ aws_env={
 }
 # or: #account_details=cdk.Environment(account=os.getenv('CDK_DEFAULT_ACCOUNT'), region=os.getenv('CDK_DEFAULT_REGION'))
 
-
-CdkAppProjectStack(app, "CdkAppProjectStack",
-
-    env=aws_env,
-    env_name=deployment_env_name,  #
-
-                   )
+vpc_stack = VPCStack(app, "VPCStack", env=aws_env)
+rds_stack = RdsStack(app,  DBEngineType.POSTGRES,"RDSStack", vpc_stack,  env=aws_env)
+infra_stack = InfraStack(app, "InfraStack", vpc_stack, [],  env=aws_env)
 
 app.synth()
+#C:\Users\oluwafemi.ayeni\PycharmProjects\cdk_app_project\cdk_app_project\config

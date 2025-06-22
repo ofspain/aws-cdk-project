@@ -40,7 +40,7 @@ def create_cluster_role(scope: Construct, role_id: str, ) -> iam.Role:
     role = iam.Role(scope, role_id,
            assumed_by=iam.ServicePrincipal("ec2.amazonaws.com"),
            managed_policies=[
-              iam.ManagedPolicy.from_aws_managed_policy_name("AmazonEC2ContainerServiceforEC2Role"),
+              iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AmazonEC2ContainerServiceforEC2Role"),
               iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSSMManagedInstanceCore"),
               iam.ManagedPolicy.from_aws_managed_policy_name("CloudWatchAgentServerPolicy")
            ]

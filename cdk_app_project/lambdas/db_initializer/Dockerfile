@@ -9,7 +9,7 @@ COPY __init__.py ${LAMBDA_TASK_ROOT}
 COPY base_handler.py ${LAMBDA_TASK_ROOT}
 COPY init_function.py ${LAMBDA_TASK_ROOT}
 COPY mysql_handler.py ${LAMBDA_TASK_ROOT}
-COPY oracle_handler.py ${LAMBDA_TASK_ROOT}
+#COPY oracle_handler.py.bk ${LAMBDA_TASK_ROOT}
 COPY postgres_handler.py ${LAMBDA_TASK_ROOT}
 
 # Copy scripts and data explicitly

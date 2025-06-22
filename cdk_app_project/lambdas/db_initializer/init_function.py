@@ -1,12 +1,12 @@
 import os
 import json
-import logging
-from turtledemo.sorting_animate import init_shelf
+# import logging
+# from turtledemo.sorting_animate import init_shelf
 from typing import Dict, Any
 
 from aws_lambda_powertools import Logger
 
-from cdk_app_project.lambdas.db_intializer import get_db_handler, DatabaseInitializationError
+from cdk_app_project.lambdas.db_initializer import get_db_handler, DatabaseInitializationError
 
 
 logger = Logger(service="db-initializer", level=os.getenv("LOG_LEVEL", "INFO"))

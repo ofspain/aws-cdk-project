@@ -1,0 +1,7 @@
+{
+  "dev": {
+    "instance_size": "SMALL",
+    "instance_class": "BURSTABLE3",
+    "database_name": "mydb"
+  }
+}

@@ -51,17 +51,28 @@ class InfraStack(Stack):
 
         ec2_features = load_configuration(self, 'ec2')
         env_name = self.node.try_get_context(Constants.DEPLOYMENT_ENVIRONMENT_KEY)
-        self.cluster_name ="ecs-cluster."+env_name
+        self.cluster_name ="ecs-cluster_"+env_name
         user_data = get_user_data({"cluster_name":self.cluster_name})
+
+        launch_template = ec2.LaunchTemplate(
+            self, formulate_resource_id(self,"LaunchTemplate"),
+            instance_type=ec2.InstanceType(ec2_features.get("instance_type")),
+            machine_image=ecs.EcsOptimizedImage.amazon_linux2(),  # Or ec2.MachineImage.latest_amazon_linux2()
+            role=self.ec2_role,
+            security_group=self.security_group,
+            user_data=user_data,
+            require_imdsv2=True
+        )
 
         self.auto_scaling_group = autoscaling.AutoScalingGroup(
             self, formulate_resource_id(self, "AutoScalingGroup"),
             vpc=self.vpc,
-            instance_type=ec2.InstanceType(ec2_features.get("type", ec2_features.get("instance_type"))),
-            machine_image=ecs.EcsOptimizedImage.amazon_linux2(),
-            role=self.ec2_role,
-            security_group=self.security_group,
-            user_data=user_data,
+            # instance_type=ec2.InstanceType(ec2_features.get("instance_type")),
+            #machine_image=ecs.EcsOptimizedImage.amazon_linux2(),
+            #role=self.ec2_role,
+            #security_group=self.security_group,
+            #user_data=user_data,
+            # require_imdsv2 = True,
             min_capacity=ec2_features.get("min_capacity", 1),
             max_capacity=ec2_features.get("max_capacity", 2),
             desired_capacity=ec2_features.get("desired_capacity", 1),
@@ -69,7 +80,9 @@ class InfraStack(Stack):
                 subnets=self.vpc.public_subnets
                 # Or, if locking down:
                 # subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
-            )
+            ),
+            launch_template=launch_template
+
         )
 
         self.add_target_tracking_scaling(target_cpu_utilization=50)

@@ -12,33 +12,34 @@ from aws_cdk import (
     aws_lambda as _lambda,
     aws_logs as logs,
     custom_resources as cr,
+    CustomResource
 )
 from constructs import Construct
 
-from cdk_app_project.stacks.stacks_utils.basic_util import formulate_resource_id
+from cdk_app_project.stacks.stacks_utils.basic_util import formulate_resource_id, load_configuration, get_enum_value
 from cdk_app_project.stacks.stacks_utils.constants_util import Constants
 from cdk_app_project.stacks.stacks_utils.role_helper import create_lambda_role
 from cdk_app_project.stacks.vpc_stack import VPCStack
 
 
-class InstanceType(enum.Enum):
+class DBEngineType(enum.Enum):
     POSTGRES = "Postgres"
     MYSQL = "MySQL"
     ORACLE = "Oracle"
 
 
-def provision_db_engine(instance_type: InstanceType) -> rds.DatabaseInstanceEngine:
+def provision_db_engine(db_engine_type: DBEngineType) -> rds.DatabaseInstanceEngine:
     db_engine = rds.DatabaseInstanceEngine()
 
-    if instance_type == InstanceType.MYSQL:
+    if db_engine_type == DBEngineType.MYSQL:
         db_engine = rds.DatabaseInstanceEngine.mysql(
             version=rds.MysqlEngineVersion.VER_8_0_39
         )
-    elif instance_type == InstanceType.POSTGRES:
+    elif db_engine_type == DBEngineType.POSTGRES:
         db_engine = rds.DatabaseInstanceEngine.postgres(
             version=rds.PostgresEngineVersion.VER_16_3
         )
-    elif instance_type == InstanceType.ORACLE:
+    elif db_engine_type == DBEngineType.ORACLE:
         db_engine = rds.DatabaseInstanceEngine.oracle(
             version=rds.OracleEngineVersion.VER_19_0_0_0_2020_04_R1
         )
@@ -50,10 +51,9 @@ class RdsStack(Stack):
     def __init__(
         self,
         scope: Construct,
-        instance_type: InstanceType,
+        db_engine_type: DBEngineType,
         stack_id: str,
         vpc_stack: VPCStack,
-        database_name:str,
         **kwargs,
     ) -> None:
         super().__init__(scope, stack_id, **kwargs)
@@ -66,33 +66,32 @@ class RdsStack(Stack):
             allow_all_outbound=True,  # Allows RDS to initiate outbound connections if needed
         )
         self.port = 3306
-        self.provision_security_group(vpc_stack.ec2_sg, instance_type)
+        self.provision_security_group(vpc_stack.ec2_sg, db_engine_type)
 
         # Create a secret for RDS credentials
-        self.db_credentials_secret = self.provision_db_credentials_secret(instance_type)
+        self.db_credentials_secret = self.provision_db_credentials_secret(db_engine_type)
 
         # Create a subnet group for RDS
         rds_subnet_group = self.provision_subnet_group()
 
         self.env_name = self.node.try_get_context(Constants.DEPLOYMENT_ENVIRONMENT_KEY)
+
+        config = load_configuration(self, 'db')
+        self.database_name = config.get("database_name")
+
         # Provision the RDS instance
         self.db_instance = rds.DatabaseInstance(
             self,
             formulate_resource_id(self,"RDSInstance"),
-            # instance_type=ec2.InstanceType.of(
-            #     ec2.InstanceClass.BURSTABLE3, ec2.InstanceSize.MEDIUM
-            # ),  # Use t3.medium for production
-            instance_type=ec2.InstanceType.of(
-                ec2.InstanceClass.BURSTABLE3,
-                ec2.InstanceSize.SMALL
-            ),  # Use t3.medium for testing
-            engine=provision_db_engine(instance_type),
+
+            instance_type=self.construct_rds_instance_type(config),
+            engine=provision_db_engine(db_engine_type),
             credentials=rds.Credentials.from_secret(self.db_credentials_secret),
             vpc=self.vpc,
             vpc_subnets=ec2.SubnetSelection(
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
             ),
-            database_name=database_name,
+            database_name=self.database_name,
             publicly_accessible=False,
             security_groups=[self.rds_sg],
             multi_az=True,  # Enable Multi-AZ for high availability
@@ -135,6 +134,7 @@ class RdsStack(Stack):
                 directory=os.path.join(os.path.dirname(__file__), "..", "..", "lambdas", "db_initializer"),
                 file="Dockerfile"
             ),
+            #C:\Users\oluwafemi.ayeni\PycharmProjects\cdk_app_project\cdk_app_project\lambdas
             timeout=cdk.Duration.minutes(5),
             memory_size=1024,
             vpc=vpc_stack.vpc,
@@ -145,8 +145,8 @@ class RdsStack(Stack):
             environment={
                 "DB_SECRET_ARN": self.db_credentials_secret.secret_arn,
                 "DB_ENDPOINT": self.db_instance.db_instance_endpoint_address,
-                "DB_NAME": database_name,
-                "DB_ENGINE": str(instance_type.name),
+                "DB_NAME": self.database_name,
+                "DB_ENGINE": str(db_engine_type.name),
                 "LOG_LEVEL": "INFO"
             },
             role=lambda_role,
@@ -157,7 +157,7 @@ class RdsStack(Stack):
         self.db_instance.secret.grant_read(docker_lambda)
         self.rds_sg.add_ingress_rule(
             self.rds_sg,
-            ec2.Port.tcp(self.db_instance.port),
+            ec2.Port.tcp(self.port),
             "Allow lambda to access database"
         )
 
@@ -166,25 +166,25 @@ class RdsStack(Stack):
             self, "DbInitProvider",
             on_event_handler=docker_lambda,
             log_retention=logs.RetentionDays.ONE_MONTH,
-            total_timeout=cdk.Duration.minutes(30),
-            query_interval=cdk.Duration.seconds(30)
+           # total_timeout=cdk.Duration.minutes(30),
+           # query_interval=cdk.Duration.seconds(30)
         )
 
         # Custom Resource with dependency on DB being available
-        init_resource = cr.CustomResource(
+        init_resource = CustomResource(
             self, "DbInitializer",
             service_token=provider.service_token,
             removal_policy=cdk.RemovalPolicy.DESTROY
         )
         init_resource.node.add_dependency(self.db_instance)
 
-    def provision_security_group(self, ec2_sg: ec2.SecurityGroup, instance_type: InstanceType) -> None:
+    def provision_security_group(self, ec2_sg: ec2.SecurityGroup, instance_type: DBEngineType) -> None:
 
         # Allow Application EC2 Access db
 
-        if instance_type == InstanceType.POSTGRES:
+        if instance_type == DBEngineType.POSTGRES:
             self.port = 5432
-        elif instance_type == InstanceType.ORACLE:
+        elif instance_type == DBEngineType.ORACLE:
             self.port = 1521
         self.rds_sg.add_ingress_rule(
             peer=ec2_sg,
@@ -211,13 +211,13 @@ class RdsStack(Stack):
         identifier = ""
         username = ""
         suffix = f"rds-credentials-{uuid.uuid4()}"
-        if instance_type == InstanceType.POSTGRES:
+        if instance_type == DBEngineType.POSTGRES:
             identifier = f"postgres-{suffix}"
             username = "postgres"
-        elif instance_type == InstanceType.MYSQL:
+        elif instance_type == DBEngineType.MYSQL:
             identifier = f"mysql-{suffix}"
             username = "admin"
-        elif instance_type == InstanceType.ORACLE:
+        elif instance_type == DBEngineType.ORACLE:
             identifier = f"oracle-{suffix}"
             username = "admin"
 
@@ -233,6 +233,16 @@ class RdsStack(Stack):
         )
 
         return cred
+
+    def construct_rds_instance_type(self, config):
+
+        size_str = config.get('instance_size', 'SMALL')  # fallback default
+        class_str = config.get('instance_class', 'BURSTABLE3')  # optional
+
+        instance_class = get_enum_value(ec2.InstanceClass, class_str, ec2.InstanceClass.BURSTABLE3)
+        instance_size = get_enum_value(ec2.InstanceSize, size_str, ec2.InstanceSize.SMALL)
+
+        return ec2.InstanceType.of(instance_class, instance_size)
 
 
 
